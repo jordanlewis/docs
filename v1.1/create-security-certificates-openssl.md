@@ -11,21 +11,21 @@ A secure CockroachDB cluster uses TLS for encrypted inter-node and client-node c
   <button class="filter-button current"><strong>OpenSSL Commands</strong></button></a>
 </div>
 
-When using OpenSSL commands to create node and client certificates, you will need access to a local copy of the CA certificate and key. It is therefore recommended to create all certificates and keys in one place and then distribute node and client certificates and keys appropriately. For the CA key, be sure to store it somewhere safe and keep a backup; if you lose it, you will not be able to add new nodes or clients to your cluster. For a walkthrough of this process, see [Manual Deployment](manual-deployment.html).
-
 <div id="toc"></div>
 
 ## Subcommands
 
 Subcommand | Usage
 -----------|------
-[`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) | Generate an RSA private key
-[`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) | Create a private key and a CSR (certificate signing request)
-[`openssl ca`](https://wiki.openssl.org/index.php/Manual:Ca(1)) | Issue a root CA certificate based on the CSR.
+[`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) | Create an RSA private key.
+[`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) | Create CA certificate and CSRs (certificate signing requests).
+[`openssl ca`](https://wiki.openssl.org/index.php/Manual:Ca(1)) | Create node and client certificates using the CSRs.
 
 ## Certificate Directory
 
-Use the `openssl genrsa` and `openssl req` subcommands to generate the CA certificate and all node and client certificates and keys in a single directory, with the files named as follows:
+When using OpenSSL commands to create node and client certificates, you will need access to a local copy of the CA certificate and key. It is therefore recommended to create all node, client, and CA certificates, and node and client keys in one place and then distribute node and client certificates and keys appropriately. For the CA key, be sure to store it somewhere safe and keep a backup; if you lose it, you will not be able to add new nodes or clients to your cluster. For a walkthrough of this process, see [Manual Deployment](manual-deployment.html).
+
+Use the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) and [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) subcommands to create the CA certificate and all node and client certificates and keys in a single directory, with the files named as follows:
 
 File name pattern | File usage
 -------------|------------
@@ -39,21 +39,21 @@ Note the following:
 
 - The CA key is never loaded automatically by `cockroach` commands, so it should be created in a separate directory, identified by the `--ca-key` flag.
 
-- <span style="color:red">Is this applicable to OpenSSL?</span> Keys (files ending in `.key`) must not have group or world permissions (maximum permissions are 0700, or `rwx------`). This check can be disabled by setting the environment variable `COCKROACH_SKIP_KEY_PERMISSION_CHECK=true`.
+- Keys (files ending in `.key`) must not have group or world permissions (maximum permissions are 0700, or `rwx------`). This check can be disabled by setting the environment variable `COCKROACH_SKIP_KEY_PERMISSION_CHECK=true`.
 
 ## Configuration Files
 
-To use `openssl req` and `openssl ca` subcommands, you need the following configuration files:
+To use [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) and [`openssl ca`](https://wiki.openssl.org/index.php/Manual:Ca(1)) subcommands, you need the following configuration files:
 
 File name pattern | File usage
 -------------|------------
-`ca.conf`     | CA configuration file
-`node.conf`   | Server configuration file
-`client.conf` | Client configuration file
+`ca.cnf`     | CA configuration file
+`node.cnf`   | Server configuration file
+`client.cnf` | Client configuration file
 
 ## Examples
 
-### Generate the CA key and certificate pair
+### Create the CA key and certificate pair
 
 1. Create two directories:
 
@@ -66,13 +66,16 @@ File name pattern | File usage
     ~~~ shell
     $ mkdir my-safe-directory
     ~~~
-    - `certs`: You'll generate your CA certificate and all node and client certificates and keys in this directory and then upload some of the files to your nodes.
-    - `my-safe-directory`: You'll generate your CA key in this directory and then reference the key when generating node and client certificates. After that, you'll keep the key safe and secret; you will not upload it to your nodes.
+    - `certs`: You'll create your CA certificate and all node and client certificates and keys in this directory and then upload some of the files to your nodes.
+    - `my-safe-directory`: You'll create your CA key in this directory and then reference the key when generating node and client certificates. After that, you'll keep the key safe and secret; you will not upload it to your nodes.
 
-2. Create the ca.conf file
+2. Create the ca.cnf file:
+
+    We recommend that you set the CA certificate expiration period as 3660 days, which is the CockroachDB default for CA certificate expiration period. 
 
     {% include copy-clipboard.html %}
     ~~~ shell
+    # OpenSSL CA configuration file
     [ ca ]
     default_ca = CA_default
 
@@ -83,7 +86,7 @@ File name pattern | File usage
     default_md = sha256 
     copy_extensions = copy
 
-    # Used to generate the CA certificate.
+    # Used to create the CA certificate.
     [ req ]
     prompt=no
     distinguished_name = distinguished_name
@@ -113,40 +116,43 @@ File name pattern | File usage
     extendedKeyUsage = clientAuth
     ~~~
 
-3. Generate the CA key using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
+    {{site.data.alerts.callout_info}}The <code>keyUsage</code> and <code>extendedkeyUsage</code> parameters are vital for CockroachDB functions. You can modify or leave out other parameters as per your preferred OpenSSL configuration, but do not leave out the <code>keyUsage</code> and <code>extendedkeyUsage</code> parameters. {{site.data.alerts.end}}
+  
+3. Create the CA key using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
-    openssl genrsa -out ${my-safe-directory}/ca.key 2048 2> /dev/null
-    chmod 400 ${my-safe-directory}/ca.key
+    $ openssl genrsa -out my-safe-directory/ca.key 2048 
+    $ chmod 400 my-safe-directory/ca.key
     ~~~
 
-4. Generate the CA certificate using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
+4. Create the CA certificate using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
     # Create CA certificate.
-    openssl req \
+    $ openssl req \
       -new \
       -x509 \
-      -config ca.conf \
-      -key ${CCERTS}/ca.key \
-      -out ${OSCERTS}/ca.crt \
+      -config ca.cnf \
+      -key my-safe-directory/ca.key \
+      -out certs/ca.crt \
       -days 3660 \
       -batch
 
     # Reset database and index files.
-    rm -f index.txt serial.txt
-    touch index.txt
-    echo '01' > serial.txt
+    $ rm -f index.txt serial.txt
+    $ touch index.txt
+    $ echo '01' > serial.txt
     ~~~
 
-### Generate the certificate and key pairs for nodes
+### Create the certificate and key pairs for nodes
 
-1. Create the node.conf file for the first node:
+1. Create the node.cnf file for the first node:
 
     {% include copy-clipboard.html %}
     ~~~ shell
+    # OpenSSL node configuration file
     [ req ]
     prompt=no
     distinguished_name = distinguished_name
@@ -154,30 +160,33 @@ File name pattern | File usage
 
     [ distinguished_name ]
     organizationName = Cockroach
-    commonName = <node-hostname>
+    commonName = node
 
     [ extensions ]
     subjectAltName = DNS:<node-hostname>,DNS:<node-domain>,IP:<IP Address>
     ~~~
 
-2. Generate the key for the first node using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
+    {{site.data.alerts.callout_info}}The <code>commonName</code> and <code>subjectAltName</code> parameters are vital for CockroachDB functions. Also, <code>commonName</code> should be set to <code>node</code>. You can modify or leave out other parameters as per your preferred OpenSSL configuration, but do not leave out the <code>commonName</code> and <code>subjectAltName</code> parameters.  {{site.data.alerts.end}}
+  
+
+2. Create the key for the first node using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
-    openssl genrsa -out ${certs}/node.key 2048 2> /dev/null
-    chmod 400 ${certs}/node.key
+    $ openssl genrsa -out certs/node.key 2048 
+    $ chmod 400 certs/node.key
     ~~~
 
-3. Generate the CSR for the first node using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
+3. Create the CSR for the first node using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
     # Create Node certificate signing request.
-    openssl req \
+    $ openssl req \
       -new \
-      -config node.conf \
-      -key ${certs}/node.key \
-      -out ${certs}/node.csr \
+      -config node.cnf \
+      -key certs/node.key \
+      -out node.csr \
       -batch
     ~~~
 
@@ -186,15 +195,15 @@ File name pattern | File usage
     {% include copy-clipboard.html %}
     ~~~ shell
     # Sign the CSR using the CA key.
-    openssl ca \
-      -config ca.conf \
-      -keyfile ${OSCERTS}/ca.key \
-      -cert ${OSCERTS}/ca.crt \
+    $ openssl ca \
+      -config ca.cnf \
+      -keyfile my-safe-directory/ca.key \
+      -cert certs/ca.crt \
       -policy signing_policy \
       -extensions signing_node_req \
-      -out ${OSCERTS}/node.crt \
-      -outdir ${OSCERTS}/ \
-      -in ${OSCERTS}/node.csr \
+      -out certs/node.crt \
+      -outdir certs/ \
+      -in node.csr \
       -days 1830 \
       -batch
     ~~~
@@ -229,10 +238,11 @@ File name pattern | File usage
 
 ### Create the certificate and key pair for a client
 
-1. Create the client.conf file for the first client:
+1. Create the client.cnf file for the first client:
 
     {% include copy-clipboard.html %}
     ~~~ shell
+    # OpenSSL client configuration file
     [ req ]
     prompt=no
     distinguished_name = distinguished_name
@@ -242,24 +252,27 @@ File name pattern | File usage
     commonName = <username>
     ~~~
 
-2. Generate the key for the first client using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
+    {{site.data.alerts.callout_info}}The <code>commonName</code> parameter is vital for CockroachDB functions. You can modify or leave out other parameters as per your preferred OpenSSL configuration, but do not leave out the <code>commonName</code> parameter.  {{site.data.alerts.end}}
+  
+
+2. Create the key for the first client using the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
-    openssl genrsa -out ${certs}/client.<username>.key 2048 2> /dev/null
-    chmod 400 ${certs}/client.<username>.key
+    $ openssl genrsa -out certs/client.<username>.key 2048 
+    $ chmod 400 certs/client.<username>.key
     ~~~
 
-3. Generate the CSR for the first client using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
+3. Create the CSR for the first client using the [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
     # Create client certificate signing request
-    openssl req \
+    $ openssl req \
       -new \
-      -config client.conf \
-      -key ${OSCERTS}/client.maxroach.key \
-      -out ${OSCERTS}/client.maxroach.csr \
+      -config client.cnf \
+      -key certs/client.maxroach.key \
+      -out certs/client.maxroach.csr \
       -batch
     ~~~
 
@@ -267,15 +280,15 @@ File name pattern | File usage
 
     {% include copy-clipboard.html %}
     ~~~ shell
-    openssl ca \
-      -config ca.conf \
-      -keyfile ${OSCERTS}/ca.key \
-      -cert ${OSCERTS}/ca.crt \
+    $ openssl ca \
+      -config ca.cnf \
+      -keyfile my-safe-directory/ca.key \
+      -cert certs/ca.crt \
       -policy signing_policy \
       -extensions signing_client_req \
-      -out ${OSCERTS}/client.maxroach.crt \
-      -outdir ${OSCERTS}/ \
-      -in ${OSCERTS}/client.maxroach.csr \
+      -out certs/client.maxroach.crt \
+      -outdir certs/ \
+      -in certs/client.maxroach.csr \
       -days 1830 \
       -batch
     ~~~    
@@ -289,4 +302,3 @@ File name pattern | File usage
 
 - [Manual Deployment](manual-deployment.html): Walkthrough starting a multi-node secure cluster and accessing it from a client.
 - [Start a Node](start-a-node.html): Learn more about the flags you pass when adding a node to a secure cluster.
-- [Other Cockroach Commands](cockroach-commands.html)
