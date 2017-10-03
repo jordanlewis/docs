@@ -190,7 +190,7 @@ File name pattern | File usage
       -batch
     ~~~
 
-4. Sign the node CSR to create the node certificate for the first node using the [`openssl ca`](https://wiki.openssl.org/index.php/Manual:Ca(1)) command:
+4. Sign the node CSR to create the node certificate for the first node using the [`openssl ca`](https://wiki.openssl.org/index.php/Manual:Ca(1)) command. We recommend that you set the node certificate expiration period as 1830 days, which is the CockroachDB default for node certificate expiration period:
 
     {% include copy-clipboard.html %}
     ~~~ shell
