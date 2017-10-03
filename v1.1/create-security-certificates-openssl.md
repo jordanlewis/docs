@@ -23,7 +23,7 @@ Subcommand | Usage
 
 ## Certificate Directory
 
-When using OpenSSL commands to create node and client certificates, you will need access to a local copy of the CA certificate and key. It is therefore recommended to create all node, client, and CA certificates, and node and client keys in one place and then distribute node and client certificates and keys appropriately. For the CA key, be sure to store it somewhere safe and keep a backup; if you lose it, you will not be able to add new nodes or clients to your cluster. For a walkthrough of this process, see [Manual Deployment](manual-deployment.html).
+When using OpenSSL commands to create node and client certificates, you will need access to a local copy of the CA certificate and key. It is therefore recommended to create all node, client, and CA certificates, and node and client keys in one place and then distribute them appropriately. For the CA key, be sure to store it somewhere safe and keep a backup; if you lose it, you will not be able to add new nodes or clients to your cluster. For a walkthrough of this process, see [Manual Deployment](manual-deployment.html).
 
 Use the [`openssl genrsa`](https://wiki.openssl.org/index.php/Manual:Genrsa(1)) and [`openssl req`](https://wiki.openssl.org/index.php/Manual:Req(1)) subcommands to create the CA certificate and all node and client certificates and keys in a single directory, with the files named as follows:
 
@@ -66,7 +66,7 @@ File name pattern | File usage
     ~~~ shell
     $ mkdir my-safe-directory
     ~~~
-    - `certs`: You'll create your CA certificate and all node and client certificates and keys in this directory and then upload some of the files to your nodes.
+    - `certs`: You'll create your CA certificate and all node and client certificates and keys in this directory and then upload the relevant files to your nodes and clients.
     - `my-safe-directory`: You'll create your CA key in this directory and then reference the key when generating node and client certificates. After that, you'll keep the key safe and secret; you will not upload it to your nodes.
 
 2. Create the ca.cnf file:
